@@ -1,0 +1,14 @@
+[tool]
+[tool.poetry]
+name = "HawliUserBot_Deployer"
+version = "1.0"
+description = "Hawli Deploy"
+authors = ["hawlisoftveyr"]
+[tool.poetry.dependencies]
+python = "^3.8"
+bs4 = "*"
+gitpython = "*"
+heroku3 = "*"
+requests = "*"
+rich = "*"
+telethon = "*"
