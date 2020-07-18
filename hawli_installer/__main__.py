@@ -1,0 +1,121 @@
+import heroku3
+from time import time
+import random
+import requests
+from git import Repo
+from git.exc import GitCommandError, InvalidGitRepositoryError, NoSuchPathError
+from hawli_installer import hata, bilgi, basarili, onemli, soru, Sifrele, logo, rm_r
+from .astring import main
+import os
+import shutil
+
+def connect (api):
+    heroku_conn = heroku3.from_key(api)
+    try:
+        heroku_conn.apps()
+    except:
+        hata("(!) API Key yanlış.")
+        exit(1)
+    return heroku_conn
+
+def createApp (connect):
+    appname = "hawli" + str(time() * 1000)[-4:].replace(".", "") + str(random.randint(0,500))
+    try:
+        connect.create_app(name=appname, stack_id_or_name='container', region_id_or_name="eu")
+    except requests.exceptions.HTTPError:
+        hata("(!) Sanırım beşten fazla uygulamanız var. Yeni uygulama oluşturabilmek için bazılarını silmeniz gerekmekte.")
+        exit(1)
+    return appname
+
+def hgit (connect, repo, appname):
+    global api
+    app = connect.apps()[appname]
+    giturl = app.git_url.replace(
+            "https://", "https://api:" + api + "@")
+
+    if "heroku" in repo.remotes:
+        remote = repo.remote("heroku")
+        remote.set_url(giturl)
+    else:
+        remote = repo.create_remote("heroku", giturl)
+    try:
+        remote.push(refspec="HEAD:refs/heads/master", force=True)
+    except Exception as e:
+        hata("Bir hata gerçekleşti! Hata:" + str(e))
+
+    bilgi("(i) PostgreSql Yükleniyor...")
+    app.install_addon(plan_id_or_name='062a1cc7-f79f-404c-9f91-135f70175577', config={})
+    basarili("(✓) PostgreSql Yüklendi!")
+    bilgi("(i) FFmpeg Yükleniyor...")
+    app.update_buildpacks(["https://github.com/jonathanong/heroku-buildpack-ffmpeg-latest"])
+    basarili("(✓) FFmpeg Yüklendi!")
+    return app
+
+if __name__ == "__main__":
+    logo()
+
+    # Telegram İşlemleri #
+    onemli("(i) StringSession alınıyor...\n\n")
+    stri, aid, ahash = main()
+    basarili("(✓) StringSession alındı!")
+
+    # Heroku İşlemleri #
+    api = soru("\n(?) Heroku API Keyinizi Yazınız: ")
+    bilgi("(i) Heroku'ya giriş yapılıyor...")
+    heroku = connect(api)
+    basarili("(✓) Giriş başarılı!")
+    bilgi("(i) Uygulama oluşturuluyor...")
+    appname = createApp(heroku)
+    basarili("(✓) Uygulama oluşturma başarılı!")
+    onemli("(i) HawliUserBot indiriliyor...")
+
+    # Noldu Kendi Reponu Yazamadın Mı? Hadi Başka Kapıya #
+    if os.path.isdir("./hawliuserbot/"):
+        rm_r("./hawliuserbot/")
+    repo = "(https://github.com/hawlisoftveyr/HawliUserBot")
+    basarili("(✓) HawliUserBot indirmesi başarılı!")
+    onemli("(i) Deploy işlemi başlatılıyor... (Bu İşlem Uzun Sürebilir)")
+    app = hgit(heroku, repo, appname)
+    config = app.config()
+
+    onemli("(i) Veriler yazılıyor...")
+
+    config['ANTI_SPAMBOT'] = 'False'
+    config['ANTI_SPAMBOT_SHOUT'] = 'False'
+    config['API_HASH'] = ahash
+    config['API_KEY'] = str(aid)
+    config['BOTLOG'] = "False"
+    config['BOTLOG_CHATID'] = "0"
+    config['CLEAN_WELCOME'] = "True"
+    config['CONSOLE_LOGGER_VERBOSE'] = "False"
+    config['COUNTRY'] = "Turkey"
+    config['DEFAULT_BIO'] = "@HawliUserBot"
+    config['GALERI_SURE'] = "60"
+    config['CHROME_DRIVER'] = "/usr/sbin/chromedriver"
+    config['GOOGLE_CHROME_BIN'] = "/usr/sbin/chromium"
+    config['HEROKU_APIKEY'] = api
+    config['HEROKU_APPNAME'] = appname
+    config['STRING_SESSION'] = stri
+    config['HEROKU_MEMEZ'] = "True"
+    config['LOGSPAMMER'] = "False"
+    config['PM_AUTO_BAN'] = "False"
+    config['PM_AUTO_BAN_LIMIT'] = "4"
+    config['TMP_DOWNLOAD_DIRECTORY'] = "./downloads/"
+    config['TZ'] = "Europe/Istanbul"
+    config['TZ_NUMBER'] = "1"
+    config['UPSTREAM_REPO_URL'] = "https://github.com/hawlisoftveyr/HawliUserBot"
+    config['TZ_NUMBER'] = "1"
+    config['WARN_LIMIT'] = "3"
+    config['WARN_MODE'] = "gmute"
+
+    basarili("(✓) Veriler yazıldı!")
+    bilgi("(i) Dyno açılıyor...")
+    try:
+        app.process_formation()["worker"].scale(1)
+    except:
+        hata("(!) Dosyalar yüklenirken bir hata oluştu. Lütfen kodu tekrar yapıştırın.")
+        exit(1)
+    basarili("(✓) Dynolar açıldı!")
+    basarili("(✓) Deploy işlemi başarılı!")
+    basarili("(✓) Kurulum tamamlandı!\n\nBirkaç dakika sonra herhangi bir sohbette '.alive' yazarak Hawli'yi kontrol edebilirsiniz.")
+
